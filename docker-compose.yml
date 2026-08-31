@@ -1,0 +1,21 @@
+services:
+  inventory:
+    image: ghcr.io/thodgesproav/warehouseinv:1.1.0
+    container_name: warehouse-inventory
+    pull_policy: always
+    restart: unless-stopped
+    stop_grace_period: 90s
+    ports:
+      - "8000:8000"
+    volumes:
+      - inventory_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  inventory_data:

@@ -1,0 +1,183 @@
+{
+  "name": "e6aa95b6-7a66-4ea5-a529-7aad8ceb6082",
+  "id": "/providers/Microsoft.Flow/flows/e6aa95b6-7a66-4ea5-a529-7aad8ceb6082",
+  "type": "Microsoft.Flow/flows",
+  "properties": {
+    "apiId": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+    "displayName": "Inventory - API",
+    "definition": {
+      "metadata": {
+        "provisioningMethod": "FromDefinition",
+        "failureAlertSubscription": true
+      },
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "undefined",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "manual": {
+          "metadata": {},
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "force": {
+                  "type": "boolean"
+                },
+                "itemId": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "integer"
+                },
+                "expectedCurrentSOH": {
+                  "type": "integer"
+                },
+                "fields": {
+                  "type": "object"
+                }
+              }
+            },
+            "triggerAuthenticationType": "All"
+          },
+          "runtimeConfiguration": {
+            "concurrency": {
+              "runs": 1
+            }
+          }
+        }
+      },
+      "actions": {
+        "Try": {
+          "runAfter": {},
+          "type": "Scope",
+          "actions": {
+            "Add_Run_script_here": {
+              "runAfter": {},
+              "type": "Compose",
+              "inputs": "Add Excel Online (Business) - Run script here after import, then update Parse script result as described in POWER_AUTOMATE.md."
+            },
+            "Parse_script_result": {
+              "runAfter": {
+                "Add_Run_script_here": [
+                  "Succeeded"
+                ]
+              },
+              "type": "ParseJson",
+              "inputs": {
+                "content": {
+                  "ok": false,
+                  "status": 503,
+                  "error": "setup_required"
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string"
+                    },
+                    "old_stock": {
+                      "type": "number"
+                    },
+                    "stock": {
+                      "type": "number"
+                    },
+                    "item": {
+                      "type": "object"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "Response": {
+              "runAfter": {
+                "Parse_script_result": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Response",
+              "kind": "Http",
+              "operationOptions": "Asynchronous",
+              "inputs": {
+                "statusCode": "@int(body('Parse_script_result')?['status'])",
+                "headers": {
+                  "Content-Type": "application/json"
+                },
+                "body": "@body('Parse_script_result')"
+              }
+            }
+          }
+        },
+        "Catch": {
+          "runAfter": {
+            "Try": [
+              "Failed",
+              "TimedOut"
+            ]
+          },
+          "type": "Scope",
+          "actions": {
+            "Service_unavailable": {
+              "runAfter": {},
+              "type": "Response",
+              "kind": "Http",
+              "operationOptions": "Asynchronous",
+              "inputs": {
+                "statusCode": 503,
+                "headers": {
+                  "Content-Type": "application/json"
+                },
+                "body": {
+                  "error": "excel_unavailable"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "connectionReferences": {},
+    "flowFailureAlertSubscribed": false,
+    "isManaged": false
+  }
+}

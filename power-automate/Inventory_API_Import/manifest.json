@@ -1,0 +1,23 @@
+{
+  "schema": "1.0",
+  "details": {
+    "displayName": "Inventory API Import",
+    "description": "Single HTTP API flow for the Excel-backed inventory application.",
+    "packageTelemetryId": "b91a866d-3aa5-4c2b-a0ca-3c417a6c3259",
+    "creator": "N/A",
+    "sourceEnvironment": ""
+  },
+  "resources": {
+    "e6aa95b6-7a66-4ea5-a529-7aad8ceb6082": {
+      "type": "Microsoft.Flow/flows",
+      "suggestedCreationType": "New",
+      "creationType": "Existing, New, Update",
+      "details": {
+        "displayName": "Inventory - API"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Root",
+      "dependsOn": []
+    }
+  }
+}

@@ -1,0 +1,2 @@
+"""Excel-backed inventory application."""
+
