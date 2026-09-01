@@ -76,4 +76,5 @@ Record each production deployment without recording secrets:
 
 | Date | Git commit | Image tag and digest | CH5 manifest SHA-256 | Result |
 | --- | --- | --- | --- | --- |
-| 2026-09-02 | `dafe01b` | `1.3.0` · `sha256:320c62836bbbe9bcbc61dae30d150e160b27c2dac5fb8a78c1ae3ce3dd312814` | Inner manifest `4bc007d430d190ea286aa402a7c59cbba5931dc8a0cad01293ef41749222e940` | Panel loaded; server redeploy pending |
+| 2026-09-02 | `dafe01b` | `1.3.0` · `sha256:320c62836bbbe9bcbc61dae30d150e160b27c2dac5fb8a78c1ae3ce3dd312814` | Inner manifest `4bc007d430d190ea286aa402a7c59cbba5931dc8a0cad01293ef41749222e940` | Superseded before onboarding |
+| 2026-09-02 | `b6d542c` | `1.3.1` · `sha256:42ac24514007d743acc20d1586878f55acded90bf0c99f6e9e29a9fcc0bb8cbf` | Inner manifest `4bc007d430d190ea286aa402a7c59cbba5931dc8a0cad01293ef41749222e940` | Clean host deployed and healthy; panel displays first-run setup |
