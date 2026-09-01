@@ -190,16 +190,22 @@ def columns(_: dict = Depends(superadmin_user)): return {"columns": get_provider
 
 @router.put("/admin/mapping")
 def mapping(data: MappingIn, _: dict = Depends(superadmin_user)):
-    columns = set(get_provider().get_columns())
+    provider = get_provider()
+    columns = set(provider.get_columns())
     required = {"id", "name", "stock"}
     if any(not data.mapping.get(key) for key in required): raise HTTPException(400, "ID, name, and stock mappings are required")
-    if any(value and value not in columns for value in data.mapping.values()): raise HTTPException(400, "A mapped column does not exist")
-    if isinstance(get_provider(), LocalSyncInventoryProvider):
-        if get_provider().get_sync_status()['pending_count']:
+    missing_required = [key for key in required if data.mapping[key] not in columns]
+    if missing_required:
+        raise HTTPException(400, f"Choose an existing Excel heading for: {', '.join(sorted(missing_required))}")
+    # Excel owns the schema. Stale optional mappings are harmless and remain
+    # visible as "missing" so a temporary removal can recover automatically and
+    # a rename can be remapped deliberately.
+    if isinstance(provider, LocalSyncInventoryProvider):
+        if provider.get_sync_status()['pending_count']:
             raise HTTPException(409, 'Wait until queued changes are synced or resolved before changing mappings')
-        if data.mapping['id'] != 'Inventory ID' or data.mapping['stock'] != 'SOH':
-            raise HTTPException(400, 'The Power Automate script requires Inventory ID and SOH for identity and stock')
-    set_mapping(data.mapping); return data.mapping
+    set_mapping(data.mapping)
+    if isinstance(provider, LocalSyncInventoryProvider): provider.request_sync()
+    return data.mapping
 
 
 @router.put("/admin/inventory/{item_id}")

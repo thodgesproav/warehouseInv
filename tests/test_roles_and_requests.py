@@ -1,7 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from test_notifications import client, request, jobs
 from app.auth import effective_user, create_token
-from app.database import db_session, initialise, runtime_setting
+from app.database import db_session, get_mapping, initialise, runtime_setting
 from app.config import settings, DEFAULT_MAPPING
 from app.inventory.power_automate import PowerAutomateInventoryProvider
 
@@ -82,6 +82,31 @@ def test_discontinued_uses_selected_column_not_position(client):
         item=PowerAutomateInventoryProvider._normalise({'Inventory ID':'B','Description':'Old model','SOH':3,'Retired':flag,'Discontinued':False},mapping)
         assert item['discontinued'] and item['stock']==3
     assert not PowerAutomateInventoryProvider._normalise({'Inventory ID':'B','Retired':'No','Discontinued':True},mapping)['discontinued']
+
+
+def test_mapping_accepts_removed_optional_heading_and_allows_core_renames(client):
+    mapping = {**DEFAULT_MAPPING, 'image': 'Deleted Photo Heading'}
+    response = client.put('/api/admin/mapping', json={'mapping': mapping})
+    assert response.status_code == 200
+    assert response.json()['image'] == 'Deleted Photo Heading'
+    assert get_mapping()['image'] == 'Deleted Photo Heading'
+
+    row = client.provider.remote.rows['A']
+    row['Asset Key'] = row.pop('Inventory ID')
+    row['Item Title'] = row.pop('Description')
+    row['Quantity'] = row.pop('SOH')
+    client.provider.sync_once()
+    renamed = {**get_mapping(), 'id': 'Asset Key', 'name': 'Item Title', 'stock': 'Quantity'}
+    response = client.put('/api/admin/mapping', json={'mapping': renamed})
+    assert response.status_code == 200
+    client.provider.sync_once()
+    assert client.provider.get_inventory()[0]['name'] == 'Adapter'
+
+
+def test_mapping_rejects_only_missing_core_headings(client):
+    response = client.put('/api/admin/mapping', json={'mapping': {**DEFAULT_MAPPING, 'stock': 'No such heading'}})
+    assert response.status_code == 400
+    assert 'stock' in response.json()['detail']
 
 
 def test_connection_settings_persist_without_exposing_urls(client,monkeypatch):

@@ -23,6 +23,20 @@ class PowerAutomateInventoryProvider(InventoryProvider):
         key = runtime_setting('inventory_api_key', settings.api_key)
         return {"Content-Type": "application/json", **({"x-api-key": key} if key else {})}
 
+    @staticmethod
+    def _fields(fields: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Carry workbook identity columns without changing the flow signature.
+
+        Older Office Scripts ignore the reserved object because it is not an
+        Excel heading. The current script consumes it, which lets admins rename
+        the ID and stock headings without rebuilding the Power Automate flow.
+        """
+        mapping = get_mapping()
+        return {
+            **(fields or {}),
+            "__inventoryMapping": {"id": mapping.get("id", "Inventory ID"), "stock": mapping.get("stock", "SOH")},
+        }
+
     def _post(self, url: str, payload: dict) -> dict:
         if not url: raise SyncUnavailable("Power Automate URL is not configured")
         try:
@@ -81,7 +95,7 @@ class PowerAutomateInventoryProvider(InventoryProvider):
 
     def get_live_inventory(self, force: bool = True) -> list[dict[str, Any]]:
         """A sync read must fail closed: cached rows must never drive remote writes."""
-        data = self._post(runtime_setting('inventory_read_url', settings.read_url), {"action": "readInventory", "force": force})
+        data = self._post(runtime_setting('inventory_read_url', settings.read_url), {"action": "readInventory", "force": force, "fields": self._fields()})
         raw_products = data if isinstance(data, list) else data.get("items")
         if not isinstance(raw_products, list) or any(not isinstance(row, dict) for row in raw_products):
             raise SyncUnavailable("Power Automate did not return an inventory array")
@@ -98,19 +112,19 @@ class PowerAutomateInventoryProvider(InventoryProvider):
             raise
 
     def adjust_stock(self, item_id: str, quantity: int, expected_current_soh: int) -> dict[str, Any]:
-        result = self._post(runtime_setting('inventory_update_url', settings.update_url), {"action": "adjustStock", "itemId": item_id, "quantity": quantity, "expectedCurrentSOH": expected_current_soh})
+        result = self._post(runtime_setting('inventory_update_url', settings.update_url), {"action": "adjustStock", "itemId": item_id, "quantity": quantity, "expectedCurrentSOH": expected_current_soh, "fields": self._fields()})
         if result.get("item"):
             return {**self._normalise(result["item"]), "old_stock": result.get("old_stock", expected_current_soh)}
         return result
     def update_item(self, item_id: str, fields: dict[str, Any]) -> dict[str, Any]:
-        result = self._post(runtime_setting('inventory_update_url', settings.update_url), {"action": "updateItem", "itemId": item_id, "fields": fields})
+        result = self._post(runtime_setting('inventory_update_url', settings.update_url), {"action": "updateItem", "itemId": item_id, "fields": self._fields(fields)})
         return self._normalise(result["item"]) if result.get("item") else result
     def add_item(self, fields: dict[str, Any]) -> dict[str, Any]:
-        result = self._post(runtime_setting('inventory_update_url', settings.update_url), {"action": "addItem", "fields": fields})
+        result = self._post(runtime_setting('inventory_update_url', settings.update_url), {"action": "addItem", "fields": self._fields(fields)})
         return self._normalise(result["item"]) if result.get("item") else result
-    def delete_item(self, item_id: str) -> None: self._post(runtime_setting('inventory_update_url', settings.update_url), {"action": "deleteItem", "itemId": item_id})
+    def delete_item(self, item_id: str) -> None: self._post(runtime_setting('inventory_update_url', settings.update_url), {"action": "deleteItem", "itemId": item_id, "fields": self._fields()})
     def get_columns(self) -> list[str]:
-        data = self._post(runtime_setting('inventory_read_url', settings.read_url), {"action": "getColumns"})
+        data = self._post(runtime_setting('inventory_read_url', settings.read_url), {"action": "getColumns", "fields": self._fields()})
         if data.get("columns"): return data["columns"]
         items = data.get("items", [])
         return [key for key in items[0] if not key.startswith("@") and key != "ItemInternalId"] if items else []

@@ -7,7 +7,7 @@ This is the handover procedure for the warehouse TSW-1060 and its inventory serv
 - Inventory server URL: `http://192.168.68.7:8000`
 - Dockge URL: `http://192.168.68.7:5001`
 - Current panel management address: `192.168.123.44` (DHCP/network dependent; discover it again if the panel moves)
-- Docker image: `ghcr.io/thodgesproav/warehouseinv:1.3.2`
+- Docker image: `ghcr.io/thodgesproav/warehouseinv:1.4.0`
 - Container name: `warehouse-inventory`
 - Panel project: `crestron/tsw-1060-launcher/dist/WarehouseInventoryLauncher.ch5z`
 - Panel project target: `TSW-1060`, `1280x800`

@@ -9,7 +9,7 @@ The app now saves locally and synchronizes in the background every 60 seconds by
 1. Upload `data/runtime/Warehouse Consumables.xlsx` to OneDrive for Business or SharePoint.
 2. Open it in Excel for the web.
 3. On `Warehouse`, rename table `Table14` to `Inventory` using **Table Design → Table Name**.
-4. Confirm `Inventory ID` and `SOH` exist and every `Inventory ID` is unique.
+4. Confirm the columns you will map as ID and stock exist, and every ID value is unique. The initial defaults are `Inventory ID` and `SOH`.
 5. Open **Automate → New Script**.
 6. Paste `docs/power-automate/InventoryOperations.ts` and save it as `Inventory Operations`.
 
@@ -105,6 +105,12 @@ Schema:
 Keep **Concurrency Control** enabled on the Request trigger with a degree of parallelism of `1`. Both Response actions must have **Asynchronous Response** enabled; Power Automate rejects synchronous Response actions when Request-trigger concurrency is enabled. The supplied import package already contains this setting, and the inventory app follows the returned status URL until the final response is ready.
 14. Save the flow, reopen the trigger, and copy the generated HTTP POST URL.
 
+The current script reads the selected ID and stock headings from the existing
+`fieldsJson` parameter. This keeps the five-parameter flow unchanged. After an
+app upgrade, replace the Office Script with the current file before renaming
+either core heading; older copies of the script only understand `Inventory ID`
+and `SOH`.
+
 ## 3. Configure the app
 
 Use the same URL twice:
@@ -119,7 +125,14 @@ SYNC_INTERVAL_SECONDS=60
 
 Restart the app, log in as Admin, open **Settings**, and select **Force synchronization**.
 
-## 4. Validate
+## 4. Excel is the source of truth
+
+- Rows added inside the `Inventory` table are imported; rows removed from that table disappear from the app on the next successful sync.
+- Optional headings may be added, removed, reordered, or renamed. A missing optional mapping is ignored without blocking sync and remains marked as missing in Settings; select a newly renamed heading if the app should use it for that feature. Restoring the old heading automatically restores its mapping.
+- The ID, display-name, and stock roles must always point to an existing heading. After renaming one, open **Settings → Column mapping**, select the new heading, and save. A rename cannot be inferred safely from heading text alone.
+- ID values—not the heading—must remain unique and non-blank. This stable value is how queued stock changes are matched to the correct Excel row.
+
+## 5. Validate
 
 1. Confirm all 98 products load.
 2. Manually change Excel, save it, and force synchronization.

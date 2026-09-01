@@ -24,6 +24,7 @@ from .power_automate import PowerAutomateInventoryProvider
 
 log = logging.getLogger(__name__)
 ACTIVE = ('pending', 'sending', 'uncertain', 'conflict')
+REQUIRED_MAPPINGS = ('id', 'name', 'stock')
 
 
 def same(a: Any, b: Any) -> bool:
@@ -318,18 +319,23 @@ class LocalSyncInventoryProvider(InventoryProvider):
             try: fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError: return
             products = self.remote.get_live_inventory()
+            raw_products = [product.get('raw_fields', {}) for product in products]
+            columns = list(dict.fromkeys(key for raw in raw_products for key in raw)) if raw_products else self.remote.get_columns()
+            # Publish the workbook's current headings even if a core mapping is
+            # now invalid, so Settings can offer the replacement immediately.
+            with db_session() as db: self._set_meta(db, 'columns', columns)
             mapping = get_mapping()
+            missing = [key for key in REQUIRED_MAPPINGS if not mapping.get(key) or mapping[key] not in columns]
+            if missing:
+                labels = ', '.join(missing)
+                raise SyncUnavailable(f'Excel headings changed. Open Settings and remap: {labels}')
             remote_rows = {}
-            for product in products:
-                item_id = str(product['id']).strip()
+            for raw in raw_products:
+                item_id = str(raw.get(mapping['id'], '')).strip()
                 if not item_id or item_id in remote_rows:
-                    raise SyncUnavailable('Excel has blank or duplicate Inventory IDs; sync paused without applying changes')
-                raw = product['raw_fields']
-                if mapping['id'] not in raw or mapping['stock'] not in raw:
-                    raise SyncUnavailable('Excel is missing the mapped ID or stock column')
+                    raise SyncUnavailable(f'Excel has blank or duplicate values in the mapped ID column ({mapping["id"]}); sync paused without applying changes')
                 stock_number(raw.get(mapping['stock']))
                 remote_rows[item_id] = raw
-            columns = list(next(iter(remote_rows.values()))) if remote_rows else self.remote.get_columns()
             with db_session() as db: operations = self._active(db)
             blocked = set()
             for op in operations[:50]:

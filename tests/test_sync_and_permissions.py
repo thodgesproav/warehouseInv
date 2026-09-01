@@ -42,6 +42,21 @@ def test_power_automate_cache_failure_and_recovery(tmp_path, monkeypatch):
     assert provider.get_inventory(force=True)[0]["stock"] == 5
 
 
+def test_power_automate_sends_selected_identity_headings(tmp_path, monkeypatch):
+    from app.database import set_mapping
+    from app.config import DEFAULT_MAPPING
+    object.__setattr__(settings, "database_path", tmp_path / "inventory.db")
+    initialise('unused')
+    set_mapping({**DEFAULT_MAPPING, 'id': 'Asset Key', 'stock': 'Quantity'})
+    provider = PowerAutomateInventoryProvider()
+    seen = []
+    monkeypatch.setattr(provider, '_post', lambda _url, payload: seen.append(payload) or {'items': []})
+    provider.get_live_inventory()
+    assert seen[0]['fields']['__inventoryMapping'] == {'id': 'Asset Key', 'stock': 'Quantity'}
+    provider.get_columns()
+    assert seen[1]['fields']['__inventoryMapping'] == {'id': 'Asset Key', 'stock': 'Quantity'}
+
+
 def test_power_automate_follows_asynchronous_response(monkeypatch, provider):
     class Response:
         def __init__(self, status_code, body=None, headers=None):

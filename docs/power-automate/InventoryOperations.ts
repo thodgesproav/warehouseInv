@@ -25,6 +25,17 @@ interface JournalEntry {
   outcome: string;
 }
 
+interface InventoryMapping {
+  id?: string;
+  stock?: string;
+}
+
+type FieldValue = string | number | boolean;
+interface FieldEnvelope {
+  [key: string]: FieldValue | InventoryMapping;
+  __inventoryMapping?: InventoryMapping;
+}
+
 function journalText(value: string): string {
   const text = String(value || '');
   return /^[=+@-]/.test(text) ? "'" + text : text;
@@ -75,10 +86,14 @@ function main(
   const table = workbook.getTable("Inventory");
   if (!table) return JSON.stringify({ok: false, status: 500, error: 'missing_inventory_table'} as OperationResult);
   const headers = table.getHeaderRowRange().getValues()[0].map(value => String(value));
-  const idColumn = headers.indexOf("Inventory ID");
-  const stockColumn = headers.indexOf("SOH");
+  const envelope = JSON.parse(fieldsJson || "{}") as FieldEnvelope;
+  const mapping = envelope.__inventoryMapping || {};
+  const idHeading = String(mapping.id || "Inventory ID");
+  const stockHeading = String(mapping.stock || "SOH");
+  const idColumn = headers.indexOf(idHeading);
+  const stockColumn = headers.indexOf(stockHeading);
   if (idColumn < 0 || stockColumn < 0) {
-    return JSON.stringify({ ok: false, status: 500, error: "missing_columns", message: "Inventory ID or SOH is missing" } as OperationResult);
+    return JSON.stringify({ ok: false, status: 500, error: "missing_columns", message: `Mapped ID (${idHeading}) or stock (${stockHeading}) heading is missing` } as OperationResult);
   }
 
   const body = table.getRangeBetweenHeaderAndTotal();
@@ -133,7 +148,10 @@ function main(
     return JSON.stringify({ ok: true, status: 200, itemId, old_stock: current, stock: updated, item: rowObject(values[rowIndex]) } as OperationResult);
   }
 
-  const fields = JSON.parse(fieldsJson || "{}") as Record<string, string | number | boolean>;
+  const fields: Record<string, FieldValue> = {};
+  Object.entries(envelope).forEach(([header, value]) => {
+    if (header !== "__inventoryMapping" && typeof value !== "object") fields[header] = value;
+  });
   if (action === "updateItem") {
     if (rowIndex < 0) return JSON.stringify({ ok: false, status: 404, error: "not_found" } as OperationResult);
     Object.entries(fields).forEach(([header, value]) => {

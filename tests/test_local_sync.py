@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from app.config import DEFAULT_MAPPING, settings
-from app.database import db_session, initialise
+from app.database import db_session, get_mapping, initialise, set_mapping
 from app.inventory.base import InsufficientStock, StockConflict, SyncUnavailable
 from app.inventory.local_sync import LocalSyncInventoryProvider
 from app.inventory.power_automate import PowerAutomateInventoryProvider
@@ -25,7 +25,7 @@ class FakeExcel:
         self.on_write = None
 
     def product(self, row):
-        return PowerAutomateInventoryProvider._normalise(copy.deepcopy(row), DEFAULT_MAPPING)
+        return PowerAutomateInventoryProvider._normalise(copy.deepcopy(row), get_mapping())
 
     def get_live_inventory(self):
         self.calls.append('read')
@@ -48,8 +48,9 @@ class FakeExcel:
     def adjust_stock(self, item_id, quantity, expected):
         self._before('stock')
         row = self.rows[item_id]
-        if row['SOH'] != expected: raise StockConflict('changed')
-        row['SOH'] += quantity
+        stock = get_mapping()['stock']
+        if row[stock] != expected: raise StockConflict('changed')
+        row[stock] += quantity
         return self._reply(row)
 
     def update_item(self, item_id, fields):
@@ -59,7 +60,7 @@ class FakeExcel:
 
     def add_item(self, fields):
         self._before('add')
-        self.rows[fields['Inventory ID']] = copy.deepcopy(fields)
+        self.rows[fields[get_mapping()['id']]] = copy.deepcopy(fields)
         return self._reply(fields)
 
     def delete_item(self, item_id):
@@ -110,11 +111,42 @@ def test_columns_refresh_and_removed_edit_is_rejected(synced):
     assert local.get_inventory()[0]['raw_fields']['Added heading'] == 'edited'
 
 
+def test_removed_optional_mapping_does_not_block_sync(synced):
+    local, remote = synced
+    assert get_mapping()['location'] == 'Bin Name'
+    del remote.rows['A']['Bin Name']
+    local.sync_once()
+    assert get_mapping()['location'] == 'Bin Name'
+    assert local.get_sync_status()['ok']
+
+
+def test_core_headings_can_be_remapped_after_excel_rename(synced):
+    local, remote = synced
+    row = remote.rows['A']
+    row['Asset Key'] = row.pop('Inventory ID')
+    row['Item Title'] = row.pop('Description')
+    row['Quantity'] = row.pop('SOH')
+    local.sync_once()
+    assert local.get_columns() == ['Notes', 'Bin Name', 'Asset Key', 'Item Title', 'Quantity']
+    assert 'remap: id, name, stock' in local.get_sync_status()['error']
+    assert local.get_inventory()[0]['name'] == 'Adapter'
+    set_mapping({**get_mapping(), 'id': 'Asset Key', 'name': 'Item Title', 'stock': 'Quantity'})
+    local.sync_once()
+    assert local.get_sync_status()['ok']
+    assert local.get_inventory()[0]['name'] == 'Adapter'
+    local.adjust_stock('A', -1, 10)
+    local.sync_once()
+    assert remote.rows['A']['Quantity'] == 9
+
+
 def test_sheet_changes_and_deletions_are_pulled(synced):
     local, remote = synced
     remote.rows['A']['Notes'] = 'Excel edit'
     local.sync_once()
     assert local.get_inventory()[0]['raw_fields']['Notes'] == 'Excel edit'
+    remote.rows['B'] = {'Inventory ID': 'B', 'Description': 'Excel row', 'SOH': 2, 'Notes': '', 'Bin Name': 'Shelf 2'}
+    local.sync_once()
+    assert {item['id'] for item in local.get_inventory()} == {'A', 'B'}
     remote.rows.clear()
     local.sync_once()
     assert local.get_inventory() == []
