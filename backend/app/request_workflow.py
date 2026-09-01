@@ -30,5 +30,5 @@ def fulfil_request(db, provider, mapping, request_id, status, user):
     db.execute('UPDATE item_requests SET status=?,inventory_item_id=?,updated_at=? WHERE id=?', (status, linked_id, now, request_id))
     if status == 'available' and request['status'] != 'available' and request['notify_available']:
         queue_email(db, f'request:{request_id}:available', 'user', 'Your requested item is available',
-                    {'Request number': request_id, 'Item': request['item_requested'], 'Quantity requested': request['quantity'], 'Status': 'Available — contact your inventory administrator for collection'}, request['requested_by'])
+                    {'Request number': request_id, 'Item': request['item_requested'], 'Quantity requested': request['quantity'], 'Status': 'Available — contact your inventory administrator for collection'}, request['notify_user_id'] or request['requested_by'])
     return {'id': request_id, 'status': status, 'inventory_item_id': linked_id}

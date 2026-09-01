@@ -1,2 +1,24 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/><meta name="theme-color" content="#123f4a"/><link rel="manifest" href="/manifest.webmanifest"/><link rel="icon" href="/icon.svg"/><title>Warehouse Inventory</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
-
+<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/><meta name="theme-color" content="#123f4a"/><link rel="manifest" href="/manifest.webmanifest"/><link rel="icon" href="/icon.svg"/><title>Warehouse Inventory</title><script>
+(function(){
+  window.__inventoryStage='html-ready';
+  function report(message,source,line,column){
+    window.setTimeout(function(){
+      var root=document.getElementById('root');
+      if(!root)return;
+      // Once React has rendered, let its error boundary preserve the current
+      // screen and report component failures. The WebView emits harmless,
+      // opaque window errors that must not replace a working application.
+      if(root.firstChild)return;
+      function clean(value){return String(value||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+      root.innerHTML='<main style="font-family:Arial,sans-serif;padding:48px;color:#173138;background:#f4f7f6;min-height:100vh"><h1>Inventory app could not start</h1><p style="font-size:20px;overflow-wrap:anywhere">'+clean(message)+'</p><p>Stage: '+clean(window.__inventoryStage)+'</p><p>'+clean(source)+(line?' · line '+line+':'+column:'')+'</p><p>'+clean(navigator.userAgent)+'</p></main>';
+    },0);
+  }
+  window.addEventListener('error',function(event){
+    var target=event.target||event.srcElement;
+    if(target&&(target.src||target.href))report('Resource failed to load: '+(target.src||target.href));
+    else report(event.message||'Unknown JavaScript error',event.filename,event.lineno,event.colno);
+  },true);
+  window.addEventListener('unhandledrejection',function(event){report(event.reason&&event.reason.message||event.reason||'Unhandled promise rejection');});
+  window.setTimeout(function(){var root=document.getElementById('root');if(root&&!root.firstChild)report('The application bundle loaded but did not render.');},10000);
+}());
+</script></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>

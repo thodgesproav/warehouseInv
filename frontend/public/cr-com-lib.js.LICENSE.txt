@@ -1,0 +1,30 @@
+/*!
+ * Copyright (C) 2026 to the present, Crestron Electronics, Inc.
+ * All rights reserved.
+ * No part of this software may be reproduced in any form, machine
+ * or natural, without the express written consent of Crestron Electronics.
+ * Use of this source code is subject to the terms of the Crestron Software License Agreement
+ * under which you licensed this source code.
+ *
+ *
+ */
+
+/*! @rags/mycolorpicker - v1.0.0 - Raghavendra Kumar Dabbir - MIT
+ - 2022-11-18 */
+
+/*! Axios v1.18.1 Copyright (c) 2026 Matt Zabriskie and contributors */
+
+/*! Hammer.JS - v2.0.7 - 2016-04-22
+ * http://hammerjs.github.io/
+ *
+ * Copyright (c) 2016 Jorik Tangelder;
+ * Licensed under the MIT license */
+
+/**
+ * @license
+ * Lodash <https://lodash.com/>
+ * Copyright OpenJS Foundation and other contributors <https://openjsf.org/>
+ * Released under MIT license <https://lodash.com/license>
+ * Based on Underscore.js 1.8.3 <http://underscorejs.org/LICENSE>
+ * Copyright Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
+ */

@@ -1,6 +1,6 @@
 services:
   inventory:
-    image: ghcr.io/thodgesproav/warehouseinv:1.1.1
+    image: ghcr.io/thodgesproav/warehouseinv:1.2.0
     container_name: warehouse-inventory
     pull_policy: always
     restart: unless-stopped

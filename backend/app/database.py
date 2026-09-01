@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS transactions (
   created_at TEXT NOT NULL, user_id INTEGER, username TEXT NOT NULL,
   item_id TEXT NOT NULL, item_name TEXT NOT NULL, quantity INTEGER NOT NULL,
   old_soh INTEGER, new_soh INTEGER, transaction_type TEXT NOT NULL,
-  success INTEGER NOT NULL, sync_status TEXT NOT NULL, error TEXT
+  success INTEGER NOT NULL, sync_status TEXT NOT NULL, error TEXT,
+  evidence_path TEXT, evidence_captured_at TEXT, evidence_error TEXT,
+  evidence_width INTEGER, evidence_height INTEGER
 );
 CREATE TABLE IF NOT EXISTS login_sessions (
   token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -122,7 +124,13 @@ def initialise(password_hash: str | None = None) -> None:
             ('item_requests', 'notify_available', 'INTEGER NOT NULL DEFAULT 0'),
             ('item_requests', 'inventory_item_id', 'TEXT'),
             ('item_requests', 'manufacturer', "TEXT NOT NULL DEFAULT ''"),
+            ('item_requests', 'notify_user_id', 'INTEGER'),
             ('transactions', 'excel_exported', 'INTEGER NOT NULL DEFAULT 0'),
+            ('transactions', 'evidence_path', 'TEXT'),
+            ('transactions', 'evidence_captured_at', 'TEXT'),
+            ('transactions', 'evidence_error', 'TEXT'),
+            ('transactions', 'evidence_width', 'INTEGER'),
+            ('transactions', 'evidence_height', 'INTEGER'),
         ):
             if column not in {row[1] for row in db.execute(f'PRAGMA table_info({table})')}:
                 db.execute(f'ALTER TABLE {table} ADD COLUMN {column} {definition}')

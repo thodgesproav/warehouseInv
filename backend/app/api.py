@@ -14,7 +14,9 @@ from .database import db_session, get_mapping, rows, set_mapping, utcnow
 from .inventory import get_provider
 from .inventory.base import InsufficientStock, InventoryError, StockConflict, SyncUnavailable
 from .inventory.local_sync import LocalSyncInventoryProvider
+from .images.thumbnails import InvalidImage, write_thumbnail
 from .notifications import queue_email, valid_email, queue_stock_availability
+from .panel_evidence import capture_transaction_evidence, evidence_file, is_warehouse_panel_request, store_transaction_evidence
 from .schemas import ItemFields, ItemRequestIn, LoginIn, MappingIn, RequestStatus, StockAdjustment, UserIn, UserUpdate
 from .request_workflow import fulfil_request
 
@@ -22,9 +24,11 @@ log = logging.getLogger("inventory.api")
 router = APIRouter(prefix="/api")
 
 
-def public_user(user: dict) -> dict:
+def public_user(user: dict, request: Request | None = None) -> dict:
     user = effective_user(user)
-    return {key: user[key] for key in ("id", "username", "display_name", "role", "disabled", "email") if key in user}
+    result = {key: user[key] for key in ("id", "username", "display_name", "role", "disabled", "email") if key in user}
+    result["warehouse_panel"] = bool(request and is_warehouse_panel_request(request))
+    return result
 
 
 @router.post("/auth/login")
@@ -40,8 +44,8 @@ def login(data: LoginIn, request: Request, response: Response):
     response.headers['Cache-Control'] = 'no-store'
     if data.remember_me is not None:
         start_session(request, response, user, data.remember_me)
-        return {'user': public_user(user)}
-    return {"access_token": create_token(user), "token_type": "bearer", "user": public_user(user)}
+        return {'user': public_user(user, request)}
+    return {"access_token": create_token(user), "token_type": "bearer", "user": public_user(user, request)}
 
 
 @router.post('/auth/logout', status_code=204)
@@ -52,7 +56,7 @@ def logout(request: Request, response: Response):
 
 
 @router.get("/auth/me")
-def me(user: dict = Depends(current_user)): return public_user(user)
+def me(request: Request, user: dict = Depends(current_user)): return public_user(user, request)
 
 
 @router.get("/inventory")
@@ -72,18 +76,21 @@ def record_transaction(user: dict, item_id: str, item_name: str, quantity: int, 
         if sync_operation_id:
             operation = db.execute('SELECT state FROM inventory_outbox WHERE operation_id=?', (sync_operation_id,)).fetchone()
             if operation: sync = 'synced' if operation[0] == 'done' else operation[0]
-        db.execute("INSERT INTO transactions(created_at,user_id,username,item_id,item_name,quantity,old_soh,new_soh,transaction_type,success,sync_status,error,sync_operation_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                   (utcnow(), user["id"], user["username"], item_id, item_name, quantity, old, new, kind, int(success), sync, error, sync_operation_id))
+        cursor = db.execute("INSERT INTO transactions(created_at,user_id,username,item_id,item_name,quantity,old_soh,new_soh,transaction_type,success,sync_status,error,sync_operation_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (utcnow(), user["id"], user["username"], item_id, item_name, quantity, old, new, kind, int(success), sync, error, sync_operation_id))
+        return int(cursor.lastrowid)
 
 
 @router.post("/inventory/{item_id}/adjust")
-def adjust_stock(item_id: str, data: StockAdjustment, user: dict = Depends(current_user)):
+def adjust_stock(item_id: str, data: StockAdjustment, request: Request, user: dict = Depends(current_user)):
     name = item_id
     try:
         item = next((p for p in get_provider().get_inventory() if p["id"] == item_id), None); name = item["name"] if item else item_id
         updated = get_provider().adjust_stock(item_id, data.quantity, data.expected_current_soh)
-        record_transaction(user, item_id, name, data.quantity, updated["old_stock"], updated["stock"], True, updated.get('sync_status', 'synced'), sync_operation_id=updated.get('sync_operation_id'))
-        return updated
+        transaction_id = record_transaction(user, item_id, name, data.quantity, updated["old_stock"], updated["stock"], True, updated.get('sync_status', 'synced'), sync_operation_id=updated.get('sync_operation_id'))
+        if data.quantity < 0 and is_warehouse_panel_request(request):
+            capture_transaction_evidence(transaction_id)
+        return {**updated, "transaction_id": transaction_id}
     except InsufficientStock as exc:
         record_transaction(user, item_id, name, data.quantity, data.expected_current_soh, None, False, "rejected", str(exc)); raise HTTPException(409, str(exc)) from exc
     except StockConflict as exc:
@@ -97,34 +104,84 @@ def activity(user: dict = Depends(current_user)):
     return rows("SELECT * FROM transactions WHERE user_id=? ORDER BY id DESC LIMIT 100", (user["id"],))
 
 
+@router.post("/panel/transactions/{transaction_id}/evidence", status_code=204, include_in_schema=False)
+async def upload_panel_evidence(transaction_id: int, request: Request, user: dict = Depends(current_user)):
+    if not is_warehouse_panel_request(request):
+        raise HTTPException(403, "Warehouse panel authentication is required")
+    with db_session() as db:
+        transaction = db.execute(
+            "SELECT user_id,success,quantity FROM transactions WHERE id=?", (transaction_id,)
+        ).fetchone()
+    if not transaction or transaction["user_id"] != user["id"] or not transaction["success"] or transaction["quantity"] >= 0:
+        raise HTTPException(404, "Transaction is not available for panel evidence")
+    content = await request.body()
+    if not store_transaction_evidence(transaction_id, content):
+        raise HTTPException(422, "Camera image was invalid")
+
+
 @router.post("/requests")
-def create_request(data: ItemRequestIn, user: dict = Depends(current_user)):
+def create_request(data: ItemRequestIn, request: Request, user: dict = Depends(current_user)):
     now = utcnow()
+    panel_request = is_warehouse_panel_request(request)
+    if data.notify_user_id is not None and not panel_request:
+        raise HTTPException(403, "Only the warehouse panel can select another notification user")
+    if panel_request and data.notify_available and data.notify_user_id is None:
+        raise HTTPException(422, "Select your user account for the availability notification")
     with db_session() as db:
         db.execute('BEGIN IMMEDIATE')
+        notify_user = None
         if data.notify_available:
-            profile = db.execute('SELECT email FROM users WHERE id=?', (user['id'],)).fetchone()
-            try: email = valid_email(profile[0] if profile else '')
+            notification_user_id = data.notify_user_id if panel_request else user['id']
+            profile = db.execute('SELECT id,display_name,email FROM users WHERE id=? AND disabled=0', (notification_user_id,)).fetchone()
+            try: email = valid_email(profile['email'] if profile else '')
             except ValueError as exc: raise HTTPException(422, 'Ask your administrator to assign an email address') from None
-            db.execute('UPDATE users SET email_notifications=1 WHERE id=?', (user['id'],))
+            notify_user = profile
+            db.execute('UPDATE users SET email_notifications=1 WHERE id=?', (notification_user_id,))
         cursor = db.execute("INSERT INTO item_requests(item_requested,manufacturer_model,quantity,notes,requested_by,requested_by_name,status,created_at,updated_at,notify_available) VALUES(?,?,?,?,?,?, 'new',?,?,?)",
                             (data.item_requested, data.manufacturer_model, data.quantity, data.notes, user["id"], user["display_name"], now, now, int(data.notify_available)))
         request_id = cursor.lastrowid
-        db.execute('UPDATE item_requests SET manufacturer=? WHERE id=?', (data.manufacturer, request_id))
+        db.execute('UPDATE item_requests SET manufacturer=?,notify_user_id=? WHERE id=?', (data.manufacturer, notify_user['id'] if notify_user else None, request_id))
         queue_email(db, f'request:{request_id}:created', 'admins', 'New inventory item request',
                     {'Request number': request_id, 'Requested by': user['display_name'], 'Item': data.item_requested,
+                     'Notify when available': notify_user['display_name'] if notify_user else 'Not requested',
                      'Manufacturer': data.manufacturer, 'Master / part number': data.manufacturer_model, 'Quantity': data.quantity, 'Notes': data.notes, 'Time (UTC)': now})
     return {"id": request_id, "status": "new"}
 
 
+@router.get("/panel/notification-users", include_in_schema=False)
+def panel_notification_users(request: Request, _: dict = Depends(current_user)):
+    if not is_warehouse_panel_request(request):
+        raise HTTPException(403, "Warehouse panel authentication is required")
+    return rows(
+        "SELECT id,username,display_name FROM users WHERE disabled=0 AND email!='' ORDER BY display_name COLLATE NOCASE,username COLLATE NOCASE"
+    )
+
+
 @router.get("/requests")
 def list_requests(user: dict = Depends(current_user)):
-    if user["role"] in ("warehouse_admin", "superadmin"): return rows("SELECT * FROM item_requests ORDER BY id DESC")
-    return rows("SELECT * FROM item_requests WHERE requested_by=? ORDER BY id DESC", (user["id"],))
+    query = "SELECT r.*,u.display_name AS notify_user_name FROM item_requests r LEFT JOIN users u ON u.id=r.notify_user_id"
+    if user["role"] in ("warehouse_admin", "superadmin"): return rows(query + " ORDER BY r.id DESC")
+    return rows(query + " WHERE r.requested_by=? ORDER BY r.id DESC", (user["id"],))
 
 
 @router.get("/admin/transactions")
-def transactions(_: dict = Depends(admin_user)): return rows("SELECT * FROM transactions ORDER BY id DESC LIMIT 500")
+def transactions(user: dict = Depends(admin_user)):
+    result = rows("SELECT * FROM transactions ORDER BY id DESC LIMIT 500")
+    for transaction in result:
+        transaction["has_evidence"] = bool(transaction.pop("evidence_path", None)) if user["role"] == "superadmin" else False
+        if user["role"] != "superadmin":
+            transaction.pop("evidence_error", None)
+            transaction.pop("evidence_captured_at", None)
+            transaction.pop("evidence_width", None)
+            transaction.pop("evidence_height", None)
+    return result
+
+
+@router.get("/admin/transactions/{transaction_id}/evidence", include_in_schema=False)
+def transaction_evidence(transaction_id: int, _: dict = Depends(superadmin_user)):
+    target = evidence_file(transaction_id)
+    if not target: raise HTTPException(404, "No evidence image is available for this transaction")
+    return FileResponse(target, media_type="image/jpeg", filename=f"transaction-{transaction_id}.jpg", content_disposition_type="inline")
 
 
 @router.get("/admin/columns")
@@ -235,11 +292,13 @@ def update_user(user_id: int, data: UserUpdate, actor: dict = Depends(superadmin
 
 @router.post("/admin/images/{item_id}")
 async def upload_image(item_id: str, file: UploadFile = File(...), _: dict = Depends(admin_user)):
-    allowed = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+    allowed = {"image/jpeg", "image/png", "image/webp"}
     if file.content_type not in allowed: raise HTTPException(400, "Use a JPG, PNG, or WebP image")
     content = await file.read(5_000_001)
     if len(content) > 5_000_000: raise HTTPException(413, "Image must be 5 MB or smaller")
-    settings.image_path.mkdir(parents=True, exist_ok=True); target = settings.image_path / f"{item_id}{allowed[file.content_type]}"; target.write_bytes(content)
+    target = settings.image_path / f"{item_id}.webp"
+    try: write_thumbnail(content, target)
+    except InvalidImage as exc: raise HTTPException(400, str(exc)) from exc
     mapping = get_mapping(); get_provider().update_item(item_id, {mapping["image"]: f"/api/images/{target.name}"})
     with db_session() as db: db.execute("INSERT INTO image_metadata(item_id,local_path,updated_at) VALUES(?,?,?) ON CONFLICT(item_id) DO UPDATE SET local_path=excluded.local_path,updated_at=excluded.updated_at", (item_id, str(target), utcnow()))
     return {"image": f"/api/images/{target.name}"}

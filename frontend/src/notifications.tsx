@@ -1,15 +1,47 @@
 import React,{useEffect,useState} from 'react'
 import {api} from './api'
 
-const emptyRequest={item_requested:'',manufacturer:'',manufacturer_model:'',quantity:1,notes:'' ,notify_available:false}
-export function RequestsPage({user}:{user:{role:string}}){
-  const [list,setList]=useState<any[]>([]),[form,setForm]=useState(emptyRequest),[message,setMessage]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false)
+type RequestForm={item_requested:string;manufacturer:string;manufacturer_model:string;quantity:number;notes:string;notify_available:boolean;notify_user_id:number|null}
+type PanelUser={id:number;username:string;display_name:string}
+const emptyRequest=(warehousePanel:boolean):RequestForm=>({item_requested:'',manufacturer:'',manufacturer_model:'',quantity:1,notes:'',notify_available:warehousePanel,notify_user_id:null})
+
+export function RequestsPage({user}:{user:{role:string;warehouse_panel?:boolean}}){
+  const warehousePanel=!!user.warehouse_panel
+  const [list,setList]=useState<any[]>([])
+  const [panelUsers,setPanelUsers]=useState<PanelUser[]>([])
+  const [form,setForm]=useState<RequestForm>(()=>emptyRequest(warehousePanel))
+  const [message,setMessage]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false)
   const load=()=>api<any[]>('/requests').then(setList)
-  useEffect(()=>{load().catch(e=>setError(e.message))},[])
+  useEffect(()=>{
+    load().catch(e=>setError(e.message))
+    if(warehousePanel)api<PanelUser[]>('/panel/notification-users').then(setPanelUsers).catch(e=>setError(e.message))
+  },[warehousePanel])
   const perform=async(work:()=>Promise<unknown>)=>{setBusy(true);setError('');setMessage('');try{await work();await load()}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
-  const submit=(e:React.FormEvent)=>{e.preventDefault();perform(async()=>{await api('/requests',{method:'POST',body:JSON.stringify(form)});setForm(emptyRequest);setMessage('Request submitted')})}
+  const submit=(e:React.FormEvent)=>{e.preventDefault();perform(async()=>{await api('/requests',{method:'POST',body:JSON.stringify(form)});setForm(emptyRequest(warehousePanel));setMessage('Request submitted')})}
   const status=(id:number,value:string)=>perform(()=>api(`/admin/requests/${id}`,{method:'PUT',body:JSON.stringify({status:value})}))
-  return <><header className="page-head"><p className="eyebrow">Requests</p><h1>{user.role!=='standard'?'Item requests':'Request an item'}</h1><p>Ask for something you need.</p></header>{error&&<p className="error">{error}</p>}{message&&<p className="success">{message}</p>}<div className="split"><form className="panel form" onSubmit={submit}><label>What do you need?<input required value={form.item_requested} onChange={e=>setForm({...form,item_requested:e.target.value})}/></label><label>Manufacturer <span>optional</span><input value={form.manufacturer} onChange={e=>setForm({...form,manufacturer:e.target.value})}/></label><label>Master / part number <span>optional</span><input value={form.manufacturer_model} onChange={e=>setForm({...form,manufacturer_model:e.target.value})}/></label><label>Quantity<input type="number" required min="1" step="1" value={form.quantity} onChange={e=>setForm({...form,quantity:Number(e.target.value)})}/></label><label>Extra information <span>optional</span><textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></label><label className="check-line"><input type="checkbox" checked={form.notify_available} onChange={e=>setForm({...form,notify_available:e.target.checked})}/>Email my assigned address when available</label><button className="primary" disabled={busy}>{busy?'Saving…':'Submit request'}</button></form><section><h2>{user.role!=='standard'?'Requests':'My requests'}</h2><div className="request-list">{list.map(r=><article className="request" key={r.id}><div><span className={`status ${r.status}`}>{r.status}</span><h3>{r.item_requested}</h3><p>Qty: {r.quantity}{user.role!=='standard'&&` · ${r.requested_by_name}`}</p>{r.manufacturer&&<p>{r.manufacturer}</p>}{r.manufacturer_model&&<p>{r.manufacturer_model}</p>}{r.notes&&<p>{r.notes}</p>}{!!r.notify_available&&<small>Availability email requested</small>}</div>{user.role!=='standard'&&<div className="request-actions"><button disabled={busy||['ordered','complete','closed'].includes(r.status)} onClick={()=>status(r.id,'ordered')}>Mark ordered</button><button disabled={busy||['complete','closed'].includes(r.status)||(r.status==='available'&&!!r.inventory_item_id)} onClick={()=>status(r.id,'available')} title="Add the requested quantity to inventory and notify the requester">Mark available</button></div>}</article>)}{!list.length&&<p className="muted">No requests yet.</p>}</div></section></div></>
+  return <>
+    <header className="page-head"><p className="eyebrow">Requests</p><h1>{user.role!=='standard'?'Item requests':'Request an item'}</h1><p>Ask for something you need.</p></header>
+    {error&&<p className="error">{error}</p>}{message&&<p className="success">{message}</p>}
+    <div className="split">
+      <form className="panel form" onSubmit={submit}>
+        <label>What do you need?<input required value={form.item_requested} onChange={e=>setForm({...form,item_requested:e.target.value})}/></label>
+        <label>Manufacturer <span>optional</span><input value={form.manufacturer} onChange={e=>setForm({...form,manufacturer:e.target.value})}/></label>
+        <label>Master / part number <span>optional</span><input value={form.manufacturer_model} onChange={e=>setForm({...form,manufacturer_model:e.target.value})}/></label>
+        <label>Quantity<input type="number" required min="1" step="1" value={form.quantity} onChange={e=>setForm({...form,quantity:Number(e.target.value)})}/></label>
+        <label>Extra information <span>optional</span><textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></label>
+        {warehousePanel&&<label>Who should be notified?
+          <select required={form.notify_available} value={form.notify_user_id??''} onChange={e=>setForm({...form,notify_user_id:e.target.value?Number(e.target.value):null})}>
+            <option value="">Select your user account</option>
+            {panelUsers.map(account=><option key={account.id} value={account.id}>{account.display_name} ({account.username})</option>)}
+          </select>
+          {!panelUsers.length&&<small className="error">No active user accounts have an assigned email address.</small>}
+        </label>}
+        <label className="check-line"><input type="checkbox" checked={form.notify_available} onChange={e=>setForm({...form,notify_available:e.target.checked,notify_user_id:e.target.checked?form.notify_user_id:null})}/>{warehousePanel?'Email the selected user when available':'Email my assigned address when available'}</label>
+        <button className="primary" disabled={busy||warehousePanel&&form.notify_available&&!form.notify_user_id}>{busy?'Saving…':'Submit request'}</button>
+      </form>
+      <section><h2>{user.role!=='standard'?'Requests':'My requests'}</h2><div className="request-list">{list.map(r=><article className="request" key={r.id}><div><span className={`status ${r.status}`}>{r.status}</span><h3>{r.item_requested}</h3><p>Qty: {r.quantity}{user.role!=='standard'&&` · ${r.requested_by_name}`}</p>{r.manufacturer&&<p>{r.manufacturer}</p>}{r.manufacturer_model&&<p>{r.manufacturer_model}</p>}{r.notes&&<p>{r.notes}</p>}{!!r.notify_available&&<small>{r.notify_user_name?`Notify ${r.notify_user_name} when available`:'Availability email requested'}</small>}</div>{user.role!=='standard'&&<div className="request-actions"><button disabled={busy||['ordered','complete','closed'].includes(r.status)} onClick={()=>status(r.id,'ordered')}>Mark ordered</button><button disabled={busy||['complete','closed'].includes(r.status)||(r.status==='available'&&!!r.inventory_item_id)} onClick={()=>status(r.id,'available')} title="Add the requested quantity to inventory and notify the requester">Mark available</button></div>}</article>)}{!list.length&&<p className="muted">No requests yet.</p>}</div></section>
+    </div>
+  </>
 }
 
 type RecipientUser={id:number;username:string;display_name:string;email:string;role:'superadmin'|'warehouse_admin'}

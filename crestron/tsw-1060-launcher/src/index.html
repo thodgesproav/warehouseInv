@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#123f4a">
+  <title>Warehouse Inventory Launcher</title>
+  <link rel="stylesheet" href="launcher.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="card" aria-labelledby="title">
+      <div class="mark" aria-hidden="true">WI</div>
+      <p class="eyebrow">Warehouse Inventory</p>
+      <h1 id="title">Panel launcher</h1>
+
+      <div id="launch-view" class="hidden">
+        <p class="lead">Opening the inventory app&hellip;</p>
+        <p id="saved-url" class="saved-url"></p>
+        <div class="actions">
+          <button id="open-now" class="primary" type="button">Open now</button>
+        </div>
+        <p class="hint">This production panel is permanently assigned to the warehouse server.</p>
+      </div>
+    </section>
+  </main>
+  <script src="cr-com-lib.js"></script>
+  <script src="launcher.js"></script>
+</body>
+</html>

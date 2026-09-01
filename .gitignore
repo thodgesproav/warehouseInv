@@ -19,3 +19,4 @@ data/runtime/
 data/backups/
 data/images/*
 !data/images/.gitkeep
+/crestron/tsw-1060-launcher/dist/*.ch5z

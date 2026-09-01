@@ -9,6 +9,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def secret_setting(name: str, default: str = "") -> str:
+    path = os.getenv(f"{name}_FILE", "")
+    if path:
+        try: return Path(path).read_text().strip()
+        except OSError: return default
+    return os.getenv(name, default)
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str = os.getenv("APP_NAME", "Warehouse Inventory")
@@ -20,7 +28,13 @@ class Settings:
     workbook_path: Path = Path(os.getenv("WORKBOOK_PATH", "data/runtime/Warehouse Consumables.xlsx"))
     source_workbook_path: Path = Path(os.getenv("SOURCE_WORKBOOK_PATH", "Warehouse Consumables.xlsx"))
     image_path: Path = Path(os.getenv("IMAGE_PATH", "data/images"))
+    evidence_path: Path = Path(os.getenv("EVIDENCE_PATH", "data/evidence"))
     backup_path: Path = Path(os.getenv("BACKUP_PATH", "data/backups"))
+    warehouse_panel_token: str = field(default=secret_setting("WAREHOUSE_PANEL_TOKEN"), repr=False)
+    warehouse_panel_snapshot_url: str = os.getenv("WAREHOUSE_PANEL_SNAPSHOT_URL", "")
+    warehouse_panel_username: str = os.getenv("WAREHOUSE_PANEL_USERNAME", "")
+    warehouse_panel_password: str = field(default=secret_setting("WAREHOUSE_PANEL_PASSWORD"), repr=False)
+    warehouse_panel_verify_tls: bool = os.getenv("WAREHOUSE_PANEL_VERIFY_TLS", "true").lower() == "true"
     inventory_provider: str = os.getenv("INVENTORY_PROVIDER", "local_excel")
     inventory_sheet: str = os.getenv("INVENTORY_SHEET", "Warehouse")
     sync_interval_seconds: int = int(os.getenv("SYNC_INTERVAL_SECONDS", "60"))

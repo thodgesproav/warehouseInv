@@ -20,6 +20,7 @@ class ItemRequestIn(BaseModel):
     quantity: int = Field(default=1, ge=1, le=10000)
     notes: str = Field(default="", max_length=2000)
     notify_available: bool = False
+    notify_user_id: int | None = Field(default=None, ge=1)
 class RequestStatus(BaseModel): status: Literal["ordered", "available"]
 class UserIn(BaseModel):
     username: str = Field(min_length=3, max_length=80)
