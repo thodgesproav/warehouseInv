@@ -13,7 +13,8 @@ def secret_setting(name: str, default: str = "") -> str:
     path = os.getenv(f"{name}_FILE", "")
     if path:
         try: return Path(path).read_text().strip()
-        except OSError: return default
+        except OSError as exc:
+            raise RuntimeError(f"Configured secret file for {name} could not be read") from exc
     return os.getenv(name, default)
 
 

@@ -7,7 +7,7 @@ This is the handover procedure for the warehouse TSW-1060 and its inventory serv
 - Inventory server URL: `http://192.168.68.7:8000`
 - Dockge URL: `http://192.168.68.7:5001`
 - Current panel management address: `192.168.123.44` (DHCP/network dependent; discover it again if the panel moves)
-- Docker image: `ghcr.io/thodgesproav/warehouseinv:1.3.1`
+- Docker image: `ghcr.io/thodgesproav/warehouseinv:1.3.2`
 - Container name: `warehouse-inventory`
 - Panel project: `crestron/tsw-1060-launcher/dist/WarehouseInventoryLauncher.ch5z`
 - Panel project target: `TSW-1060`, `1280x800`
@@ -32,6 +32,8 @@ environment:
 secrets:
   - warehouse_panel_token
 ```
+
+The container runs as UID/GID `10001`. For a direct bind-mounted secret on the production host, set the file owner to `10001:10001` and mode `0400`; `root:root` mode `0600` is unreadable inside the container. Version 1.3.2 and newer fail startup if a configured secret file cannot be read instead of silently disabling the integration.
 
 ## Server update in Dockge
 

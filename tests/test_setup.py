@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.auth import verify_password
-from app.config import settings, DEFAULT_MAPPING
+from app.config import settings, DEFAULT_MAPPING, secret_setting
 from app.database import initialise, db_session
 from app.main import app
 from app.setup_api import prepare_security, private_secret
@@ -128,3 +128,10 @@ def test_security_secret_rejects_symlink(tmp_path):
     link = tmp_path/'link'
     link.symlink_to(original)
     with pytest.raises(OSError): private_secret(link)
+
+
+def test_configured_secret_file_fails_closed_when_unreadable(tmp_path, monkeypatch):
+    missing = tmp_path / 'missing-panel-token'
+    monkeypatch.setenv('TEST_PANEL_TOKEN_FILE', str(missing))
+    with pytest.raises(RuntimeError, match='TEST_PANEL_TOKEN'):
+        secret_setting('TEST_PANEL_TOKEN')

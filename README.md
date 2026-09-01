@@ -8,10 +8,10 @@ The app stays responsive while Excel is slow or unavailable. Pending changes sur
 
 ```bash
 docker login ghcr.io -u YOUR-GITHUB-USERNAME
-docker pull ghcr.io/thodgesproav/warehouseinv:1.3.1
+docker pull ghcr.io/thodgesproav/warehouseinv:1.3.2
 docker run -d --name inventory --restart unless-stopped --stop-timeout 90 \
   -p 8000:8000 --mount source=inventory_data,target=/data \
-  ghcr.io/thodgesproav/warehouseinv:1.3.1
+  ghcr.io/thodgesproav/warehouseinv:1.3.2
 docker exec inventory cat /data/setup-token
 ```
 
@@ -19,4 +19,4 @@ Open `http://YOUR-SERVER:8000` on a trusted network and enter the setup code. Th
 
 The published image supports Linux AMD64 and ARM64 and does not include this installation's database, workbook, credentials or images. The GitHub package is private, so the Docker host must sign in with a GitHub token that has `read:packages` permission. To retain existing records, follow the migration instructions in [single-container deployment](docs/DOCKER_DEPLOYMENT.md).
 
-To build from source: `docker build -t warehouse-inventory:1.3.1 .` Then use the same run command above. See [deployment and backup](docs/DOCKER_DEPLOYMENT.md), [touch-panel deployment](docs/TOUCH_PANEL_DEPLOYMENT.md), [administration](docs/ADMINISTRATION.md), [Power Automate setup](docs/POWER_AUTOMATE.md), and [local development](docs/INSTALL.md).
+To build from source: `docker build -t warehouse-inventory:1.3.2 .` Then use the same run command above. See [deployment and backup](docs/DOCKER_DEPLOYMENT.md), [touch-panel deployment](docs/TOUCH_PANEL_DEPLOYMENT.md), [administration](docs/ADMINISTRATION.md), [Power Automate setup](docs/POWER_AUTOMATE.md), and [local development](docs/INSTALL.md).
