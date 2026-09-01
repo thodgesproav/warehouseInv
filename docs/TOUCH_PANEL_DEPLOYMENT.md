@@ -72,6 +72,12 @@ To rotate the permanent token, generate a new cryptographically random 32-byte h
 
 If the panel shows a white page, first confirm the server is running the legacy-browser production build. If it shows a login page, the server and CH5Z tokens differ, `WAREHOUSE_PANEL_USER` does not match an active standard account, or the launcher fragment was not processed. If inventory loads but camera capture fails, verify the server's panel snapshot URL and panel web credentials independently of the installation token.
 
+## Current workbook attention
+
+The 2026-09-02 production check found 111 Excel rows and no queued app writes, but two cable rows share `Inventory ID` `INV-EXCEL-1788302995799-2`: `5mtr RJ45 Cat 6 Patch Cable - Black` and `3mtr RJ45 Cat 6 Patch Cable - Black`. Give either row a new unique, non-blank ID in Excel. Until then, background reconciliation intentionally remains paused so a stock write cannot target the wrong row.
+
+Version 1.4.0 accepts missing optional mappings and exposes changed headings for remapping. Before renaming the mapped ID or stock heading, also replace the Microsoft 365 Office Script with the repository's current `docs/power-automate/InventoryOperations.ts`; the Power Automate flow and its five parameter mappings do not change. A repository or container update cannot replace the tenant-hosted Office Script automatically.
+
 ## Maintenance record
 
 Record each production deployment without recording secrets:
@@ -81,3 +87,4 @@ Record each production deployment without recording secrets:
 | 2026-09-02 | `dafe01b` | `1.3.0` · `sha256:320c62836bbbe9bcbc61dae30d150e160b27c2dac5fb8a78c1ae3ce3dd312814` | Inner manifest `4bc007d430d190ea286aa402a7c59cbba5931dc8a0cad01293ef41749222e940` | Superseded before onboarding |
 | 2026-09-02 | `b6d542c` | `1.3.1` · `sha256:42ac24514007d743acc20d1586878f55acded90bf0c99f6e9e29a9fcc0bb8cbf` | Inner manifest `4bc007d430d190ea286aa402a7c59cbba5931dc8a0cad01293ef41749222e940` | Clean host deployed and healthy; panel displays first-run setup |
 | 2026-09-02 | `1336507` | `1.3.2` · `sha256:73f6aef623413f9f359519661e777b3d711a9726345b3628f7a6e2a9cb453df1` | Inner manifest `4bc007d430d190ea286aa402a7c59cbba5931dc8a0cad01293ef41749222e940` | Secret ownership repaired; automatic panel login verified visually and by API |
+| 2026-09-02 | `f83c83c` | `1.4.0` · `sha256:c1852cde95036ed28b49770abefeb72d63fc0df2437daf1afb5c3ccf8f8c69eb` | Unchanged · inner manifest `4bc007d430d190ea286aa402a7c59cbba5931dc8a0cad01293ef41749222e940` | Excel-authoritative schema deployed; host backup `backups/pre-1.4.0-20260902`; container healthy and panel automatic authentication verified |
