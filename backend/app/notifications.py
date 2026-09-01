@@ -28,6 +28,22 @@ def set_config(db, key, value):
     db.execute('INSERT OR REPLACE INTO settings VALUES (?,?)', (key, json.dumps(value)))
 
 
+def request_recipient_users(db):
+    """Resolve selected, active admin accounts at send time so stale emails never receive requests."""
+    eligible = [dict(row) for row in db.execute(
+        "SELECT id,username,display_name,email,access_level AS role FROM users "
+        "WHERE role='admin' AND access_level IN ('superadmin','warehouse_admin') "
+        "AND disabled=0 AND email!='' ORDER BY display_name COLLATE NOCASE,username COLLATE NOCASE"
+    )]
+    selected = config_value(db, 'admin_request_user_ids')
+    if selected is None:
+        # One-time compatibility for installations that stored recipient emails.
+        legacy = {str(value).strip().lower() for value in config_value(db, 'admin_request_emails', [])}
+        return [user for user in eligible if user['email'].lower() in legacy]
+    selected_ids = {value for value in selected if isinstance(value, int) and not isinstance(value, bool)}
+    return [user for user in eligible if user['id'] in selected_ids]
+
+
 def valid_email(value):
     value = value.strip()
     if len(value) > 254 or not re.fullmatch(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,63}", value):
@@ -73,7 +89,15 @@ def queue_stock_availability(db, old_rows, new_rows, mapping):
 
 def delivery_settings():
     with db_session() as db:
-        return {'admin_emails': config_value(db, 'admin_request_emails', []),
+        eligible = [dict(row) for row in db.execute(
+            "SELECT id,username,display_name,email,access_level AS role FROM users "
+            "WHERE role='admin' AND access_level IN ('superadmin','warehouse_admin') "
+            "AND disabled=0 AND email!='' ORDER BY display_name COLLATE NOCASE,username COLLATE NOCASE"
+        )]
+        selected = request_recipient_users(db)
+        return {'admin_emails': [user['email'] for user in selected],
+                'recipient_users': eligible,
+                'selected_user_ids': [user['id'] for user in selected],
                 'email_enabled': config_value(db, 'email_enabled', False),
                 'email_flow_configured': bool(config_value(db, 'email_flow_url', '')),
                 'transaction_export_enabled': config_value(db, 'transaction_export_enabled', False),
@@ -103,7 +127,7 @@ class DeliveryWorker:
             with db_session() as db:
                 db.execute('BEGIN IMMEDIATE')
                 if not config_value(db, 'email_enabled', False): return
-                if job['recipient_kind'] == 'admins': recipients = config_value(db, 'admin_request_emails', [])
+                if job['recipient_kind'] == 'admins': recipients = [user['email'] for user in request_recipient_users(db)]
                 else:
                     user = db.execute('SELECT email,email_notifications,disabled FROM users WHERE id=?', (job['user_id'],)).fetchone()
                     if not user or user['disabled'] or not user['email_notifications'] or not user['email']:

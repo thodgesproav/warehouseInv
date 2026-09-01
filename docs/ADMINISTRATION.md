@@ -72,7 +72,7 @@ Use **Sort by** and **↑ Asc / ↓ Desc** for name, stock, location, manufactur
 
 ## Superadmin maintenance
 
-Settings includes database export, read/update HTTP URLs, an optional API key, sync interval, pause/resume, email flow URL, request recipients, email delivery history/retry, journal export, column mappings and conflict resolution. Stored URLs and keys are not displayed; blank URL/key inputs preserve existing values. The optional API key has an explicit removal checkbox.
+Settings includes database export, read/update HTTP URLs, an optional API key, sync interval, pause/resume, email flow URL, request recipients, email delivery history/retry, journal export, column mappings and conflict resolution. Request recipients are selected from active Superadmin and Warehouse Admin accounts with assigned email addresses; role, disabled-state and email changes take effect at delivery time. Stored URLs and keys are not displayed; blank URL/key inputs preserve existing values. The optional API key has an explicit removal checkbox.
 
 The database settings take precedence over matching environment defaults and survive restarts. URL changes are rejected while inventory changes are pending, or while an inventory pass is running. Confirm that a replacement connection points to the intended workbook before saving. Pausing preserves queued changes and stops subsequent inventory/journal passes; email delivery has a separate switch. It does not undo any action already performed in a flow.
 

@@ -4,7 +4,7 @@ import {api} from './api'
 
 export function SetupWizard({mapping,onComplete}:{mapping:Record<string,string>;onComplete:()=>void}){
   const [step,setStep]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState(''),[done,setDone]=useState(false);
-  const [confirmPassword,setConfirmPassword]=useState(''),[recipients,setRecipients]=useState('');
+  const [confirmPassword,setConfirmPassword]=useState('');
   const [form,setForm]=useState({setup_code:'',username:'',display_name:'',email:'',password:'',read_url:'',update_url:'',api_key:'',configure_later:false,interval_seconds:60,email_flow_url:'',email_enabled:false,transaction_export_enabled:false,session_days:30,mapping});
   const change=(key:string,value:string|boolean|number)=>setForm(current=>({...current,[key]:value,...(key==='email_flow_url'&&!value?{email_enabled:false}:{})}));
   const submit=async(event:React.FormEvent)=>{
@@ -12,7 +12,7 @@ export function SetupWizard({mapping,onComplete}:{mapping:Record<string,string>;
     if(step===0&&form.password!==confirmPassword){setError('The passwords do not match.');return}
     if(step<3){setStep(step+1);return}
     setBusy(true);
-    try{await api('/setup/complete',{method:'POST',body:JSON.stringify({...form,setup_code:form.setup_code.trim(),admin_emails:recipients.split(/[\s,;]+/).filter(Boolean)})});setDone(true);setForm(current=>({...current,password:'',setup_code:'',api_key:'',read_url:'',update_url:'',email_flow_url:''}));setConfirmPassword('')}
+    try{await api('/setup/complete',{method:'POST',body:JSON.stringify({...form,setup_code:form.setup_code.trim()})});setDone(true);setForm(current=>({...current,password:'',setup_code:'',api_key:'',read_url:'',update_url:'',email_flow_url:''}));setConfirmPassword('')}
     catch(e){setError((e as Error).message)}finally{setBusy(false)}
   };
   return <main className="setup-shell"><section className="setup-card"><div className="brand-mark"><Box/></div><p className="eyebrow">First-run setup</p><h1>Welcome to Warehouse Inventory</h1>
@@ -31,7 +31,7 @@ export function SetupWizard({mapping,onComplete}:{mapping:Record<string,string>;
       <label>Email notification flow URL <span>optional</span><input type="password" autoComplete="off" value={form.email_flow_url} onChange={e=>change('email_flow_url',e.target.value)}/></label>
       <p className="muted">Only HTTPS Microsoft Power Automate URLs are accepted. These secrets remain in the persistent database, not in the Docker image.</p></>}
     {step===2&&<><h2>Initial settings</h2><div className="field-grid"><label>Inventory sync interval (seconds)<input type="number" min={10} max={3600} required value={form.interval_seconds} onChange={e=>change('interval_seconds',Number(e.target.value))}/></label><label>Remembered sign-in (days)<input type="number" min={1} max={365} required value={form.session_days} onChange={e=>change('session_days',Number(e.target.value))}/></label></div>
-      <label>Request email recipients <span>one per line; blank uses your Superadmin email</span><textarea value={recipients} onChange={e=>setRecipients(e.target.value)}/></label>
+      <p className="muted">Your Superadmin account receives request emails initially. After setup, select any Superadmin or Warehouse Admin recipients in Settings.</p>
       <label className="check-line"><input type="checkbox" checked={form.email_enabled} disabled={!form.email_flow_url} onChange={e=>change('email_enabled',e.target.checked)}/>Enable email delivery using the configured flow</label>
       <label className="check-line"><input type="checkbox" checked={form.transaction_export_enabled} onChange={e=>change('transaction_export_enabled',e.target.checked)}/>Export transactions to Excel (updated Inventory Operations script required)</label>
       <details><summary>Column headings</summary><p>Use the exact headings in the Inventory table. You can select columns in Settings after the first download.</p><div className="field-grid">{Object.entries(form.mapping).map(([key,value])=><label key={key}>{key.replaceAll('_',' ')}<input maxLength={200} required={['id','name','stock'].includes(key)} readOnly={['id','stock'].includes(key)} value={value} onChange={e=>setForm(current=>({...current,mapping:{...current.mapping,[key]:e.target.value}}))}/></label>)}</div></details></>}

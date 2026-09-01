@@ -53,9 +53,10 @@ class FakeMail:
 
 def enable_email():
     with db_session() as db:
+        manager = db.execute("INSERT INTO users(username,display_name,password_hash,role,access_level,email,created_at) VALUES('manager','Warehouse Manager','unused','admin','warehouse_admin','manager@example.com',?)", (utcnow(),))
         set_config(db, 'email_enabled', True)
         set_config(db, 'email_flow_url', 'https://test.environment.api.powerplatform.com/flow')
-        set_config(db, 'admin_request_emails', ['first@example.com', 'second@example.com'])
+        set_config(db, 'admin_request_user_ids', [1, manager.lastrowid])
 
 
 def test_request_queue_escapes_html_and_waits_for_setup(client):
@@ -64,7 +65,7 @@ def test_request_queue_escapes_html_and_waits_for_setup(client):
     mail = FakeMail(); DeliveryWorker(mail).send_emails()
     assert mail.calls == [] and jobs()[0]['state'] == 'queued'
     enable_email(); DeliveryWorker(mail).send_emails()
-    assert mail.calls[0]['to'] == 'first@example.com;second@example.com'
+    assert mail.calls[0]['to'] == 'owner@example.com;manager@example.com'
     assert jobs()[0]['state'] == 'sent'
     DeliveryWorker(mail).send_emails()
     assert len(mail.calls) == 1
@@ -97,7 +98,7 @@ def test_validation_and_admin_permissions(client):
     assert jobs() == []
     with db_session() as db: db.execute("UPDATE users SET email='' WHERE id=1")
     assert client.put('/api/me/preferences', json={'email_notifications': True}).status_code == 422
-    assert client.put('/api/admin/delivery-settings', json={'email_enabled': True, 'admin_emails': ['a@example.com']}).status_code == 422
+    assert client.put('/api/admin/delivery-settings', json={'email_enabled': True, 'recipient_user_ids': [1]}).status_code == 422
     assert client.put('/api/admin/delivery-settings', json={'email_flow_url': 'http://localhost/'}).status_code == 422
     assert client.put('/api/admin/delivery-settings', json={'email_flow_url': 'https://evil.example.com/'}).status_code == 422
     client.actor['role'] = 'standard'
@@ -108,11 +109,37 @@ def test_validation_and_admin_permissions(client):
 
 def test_settings_preserve_secret_without_returning_it(client):
     secret = 'https://test.environment.api.powerplatform.com/flow?test_signature=not-real'
-    response = client.put('/api/admin/delivery-settings', json={'email_flow_url': secret, 'admin_emails': ['A@example.com', 'a@example.com']})
+    response = client.put('/api/admin/delivery-settings', json={'email_flow_url': secret, 'recipient_user_ids': [1]})
     assert response.status_code == 200 and 'private-test' not in response.text
-    assert response.json()['admin_emails'] == ['a@example.com']
-    assert client.put('/api/admin/delivery-settings', json={'email_enabled': True, 'admin_emails': ['b@example.com']}).status_code == 200
+    assert response.json()['admin_emails'] == ['owner@example.com']
+    assert response.json()['selected_user_ids'] == [1]
+    assert client.put('/api/admin/delivery-settings', json={'email_enabled': True, 'recipient_user_ids': [1]}).status_code == 200
     assert client.get('/api/admin/delivery-settings').json()['email_flow_configured']
+
+
+def test_request_recipients_are_selected_admin_accounts(client):
+    with db_session() as db:
+        manager = db.execute("INSERT INTO users(username,display_name,password_hash,role,access_level,email,created_at) VALUES('manager','Warehouse Manager','unused','admin','warehouse_admin','manager@example.com',?)", (utcnow(),)).lastrowid
+        standard = db.execute("INSERT INTO users(username,display_name,password_hash,role,access_level,email,created_at) VALUES('worker','Worker','unused','standard','standard','worker@example.com',?)", (utcnow(),)).lastrowid
+        disabled = db.execute("INSERT INTO users(username,display_name,password_hash,role,access_level,email,disabled,created_at) VALUES('disabled','Disabled Admin','unused','admin','superadmin','disabled@example.com',1,?)", (utcnow(),)).lastrowid
+    settings_response = client.get('/api/admin/delivery-settings').json()
+    assert [user['id'] for user in settings_response['recipient_users']] == [1, manager]
+    assert client.put('/api/admin/delivery-settings', json={'recipient_user_ids': [standard]}).status_code == 422
+    assert client.put('/api/admin/delivery-settings', json={'recipient_user_ids': [disabled]}).status_code == 422
+    assert client.put('/api/admin/delivery-settings', json={'recipient_user_ids': [999]}).status_code == 422
+    assert client.put('/api/admin/delivery-settings', json={'recipient_user_ids': [manager]}).status_code == 200
+    with db_session() as db:
+        db.execute("UPDATE users SET email='new-manager@example.com' WHERE id=?", (manager,))
+        set_config(db, 'email_enabled', True)
+        set_config(db, 'email_flow_url', 'https://test.environment.api.powerplatform.com/flow')
+    request(client)
+    mail = FakeMail(); DeliveryWorker(mail).send_emails()
+    assert mail.calls[0]['to'] == 'new-manager@example.com'
+    request(client)
+    with db_session() as db:
+        db.execute("UPDATE users SET role='standard',access_level='standard' WHERE id=?", (manager,))
+    DeliveryWorker(mail).send_emails()
+    assert len(mail.calls) == 1 and jobs()[-1]['state'] == 'queued'
 
 
 def test_stock_watches_are_one_shot_and_cancellable(client, monkeypatch):

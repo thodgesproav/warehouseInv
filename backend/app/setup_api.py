@@ -60,7 +60,6 @@ class SetupIn(BaseModel):
     configure_later: bool = False
     interval_seconds: int = Field(default=60, ge=10, le=3600)
     email_flow_url: str = Field(default='', max_length=4000, repr=False)
-    admin_emails: list[str] = Field(default_factory=list, max_length=20)
     email_enabled: bool = False
     transaction_export_enabled: bool = False
     session_days: int = Field(default=30, ge=1, le=365)
@@ -91,7 +90,6 @@ def complete(data: SetupIn, request: Request):
         raise HTTPException(403, 'The setup code is incorrect')
     try:
         email = valid_email(data.email)
-        recipients = list(dict.fromkeys(valid_email(e).lower() for e in (data.admin_emails or [email])))
         read_url = valid_flow_url(data.read_url.strip()) if data.read_url.strip() else ''
         update_url = valid_flow_url(data.update_url.strip()) if data.update_url.strip() else read_url
         email_url = valid_flow_url(data.email_flow_url.strip()) if data.email_flow_url.strip() else ''
@@ -108,13 +106,14 @@ def complete(data: SetupIn, request: Request):
         db.execute('BEGIN IMMEDIATE')
         if db.execute('SELECT 1 FROM users LIMIT 1').fetchone():
             raise HTTPException(409, 'Setup has already been completed')
-        db.execute("INSERT INTO users(username,display_name,email,password_hash,role,access_level,created_at) VALUES(?,?,?,?,'admin','superadmin',?)",
-                   (data.username, data.display_name, email, password_hash, utcnow()))
+        owner = db.execute("INSERT INTO users(username,display_name,email,password_hash,role,access_level,created_at) VALUES(?,?,?,?,'admin','superadmin',?)",
+                           (data.username, data.display_name, email, password_hash, utcnow()))
         for key, value in {
             'inventory_read_url': read_url, 'inventory_update_url': update_url, 'inventory_api_key': data.api_key,
             'inventory_sync_enabled': bool(read_url) and not data.configure_later,
             'sync_interval_seconds': data.interval_seconds, 'email_flow_url': email_url,
-            'email_enabled': data.email_enabled, 'admin_request_emails': recipients,
+            'email_enabled': data.email_enabled, 'admin_request_emails': [email.lower()],
+            'admin_request_user_ids': [owner.lastrowid],
             'transaction_export_enabled': data.transaction_export_enabled, 'session_days': data.session_days,
             'column_mapping': data.mapping, 'setup_completed_at': utcnow(),
         }.items(): set_config(db, key, value)

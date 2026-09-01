@@ -12,7 +12,7 @@ from .auth import current_user, superadmin_user
 from .config import settings
 from .database import db_session, utcnow
 from .inventory import get_provider
-from .notifications import config_value, set_config, valid_email, valid_flow_url, delivery_settings
+from .notifications import config_value, set_config, valid_flow_url, delivery_settings, request_recipient_users
 
 router = APIRouter(prefix='/api')
 
@@ -44,7 +44,8 @@ class Preferences(BaseModel):
 
 
 class DeliverySettings(BaseModel):
-    admin_emails: list[str] = Field(default_factory=list, max_length=20)
+    model_config = ConfigDict(extra='forbid')
+    recipient_user_ids: list[int] = Field(default_factory=list, max_length=20)
     email_enabled: bool = False
     email_flow_url: str | None = Field(default=None, max_length=4000)
     transaction_export_enabled: bool = False
@@ -98,14 +99,24 @@ def get_delivery_settings(_=Depends(superadmin_user)): return delivery_settings(
 @router.put('/admin/delivery-settings')
 def save_delivery_settings(data: DeliverySettings, _=Depends(superadmin_user)):
     try:
-        emails = list(dict.fromkeys(valid_email(value).lower() for value in data.admin_emails))
         url = valid_flow_url(data.email_flow_url.strip()) if data.email_flow_url and data.email_flow_url.strip() else None
     except ValueError as exc: raise HTTPException(422, str(exc)) from None
+    selected_ids = list(dict.fromkeys(data.recipient_user_ids))
+    if any(isinstance(value, bool) or value < 1 for value in selected_ids):
+        raise HTTPException(422, 'Select valid administrator accounts')
     with db_session() as db:
+        eligible_ids = {row[0] for row in db.execute(
+            "SELECT id FROM users WHERE role='admin' AND access_level IN ('superadmin','warehouse_admin') "
+            "AND disabled=0 AND email!=''"
+        )}
+        if not set(selected_ids).issubset(eligible_ids):
+            raise HTTPException(422, 'A selected recipient is disabled, has no email, or is no longer an administrator')
         if data.email_enabled and not (url or config_value(db, 'email_flow_url', '')):
             raise HTTPException(422, 'Add the notification flow URL before enabling emails')
-        if data.email_enabled and not emails: raise HTTPException(422, 'Add at least one admin request recipient')
-        set_config(db, 'admin_request_emails', emails)
+        if data.email_enabled and not selected_ids: raise HTTPException(422, 'Select at least one request recipient')
+        set_config(db, 'admin_request_user_ids', selected_ids)
+        resolved = request_recipient_users(db)
+        set_config(db, 'admin_request_emails', [user['email'] for user in resolved])
         set_config(db, 'email_enabled', data.email_enabled)
         set_config(db, 'transaction_export_enabled', data.transaction_export_enabled)
         if url: set_config(db, 'email_flow_url', url)

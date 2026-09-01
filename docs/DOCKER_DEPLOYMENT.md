@@ -2,20 +2,20 @@
 
 ## Included
 
-`warehouse-inventory:1.1.0` is one multi-platform image (Linux AMD64 and ARM64). It serves the compiled website and API on port 8000 and runs inventory/email workers in the same process. SQLite and persistent files live in `/data`. No other services are required. The image runs as non-root UID/GID **10001**, has a health check, and supports a read-only root filesystem.
+`ghcr.io/thodgesproav/warehouseinv:1.1.1` is one multi-platform image (Linux AMD64 and ARM64). It serves the compiled website and API on port 8000 and runs inventory/email workers in the same process. SQLite and persistent files live in `/data`. No other services are required. The image runs as non-root UID/GID **10001**, has a health check, and supports a read-only root filesystem.
 
 No organisation data or signed URLs are included. No default account is created. A fresh volume presents the wizard; an existing configured database opens normal login.
 
 ## Load and run
 
-Copy the packaged archive onto the Docker host:
+Pull the public image from GitHub Container Registry:
 
 ```bash
-docker load -i warehouse-inventory-1.1.0.tar.gz
+docker pull ghcr.io/thodgesproav/warehouseinv:1.1.1
 docker run -d --name inventory --restart unless-stopped --stop-timeout 90 \
   --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
   -p 8000:8000 --mount source=inventory_data,target=/data \
-  warehouse-inventory:1.1.0
+  ghcr.io/thodgesproav/warehouseinv:1.1.1
 docker exec inventory cat /data/setup-token
 ```
 
@@ -23,7 +23,7 @@ Open `http://YOUR-SERVER:8000` for initial setup on a trusted network. Port publ
 
 Docker creates the named volume automatically. **Keep the volume:** deleting it loses records, sessions, images, configuration and pending changes. Use exactly one running container per database. Do not run the old app and its replacement against the same workbook during migration.
 
-Docker with a containerd image store can load the combined multi-platform archive. If an older engine cannot import it, enable the containerd image store or build on the target host: `docker build -t warehouse-inventory:1.1.0 .`. From a compatible host, `docker image save --platform linux/amd64 -o inventory-amd64.tar warehouse-inventory:1.1.0` exports only AMD64; substitute `linux/arm64` for ARM.
+To build instead of pulling, run `docker build -t warehouse-inventory:1.1.1 .` on the target host. The published image selects Linux AMD64 or ARM64 automatically.
 
 ## First-run wizard
 
@@ -53,7 +53,7 @@ docker run -d --name inventory --restart unless-stopped --stop-timeout 90 \
   -p 443:8000 --mount source=inventory_data,target=/data \
   --mount type=bind,source=/srv/inventory-certs,target=/certs,readonly \
   -e TLS_CERTFILE=/certs/fullchain.pem -e TLS_KEYFILE=/certs/privkey.pem \
-  warehouse-inventory:1.1.0
+  ghcr.io/thodgesproav/warehouseinv:1.1.1
 ```
 
 Use a certificate valid for your server's hostname, issued by a public CA or an organisation CA trusted by your devices. Certificate issuance and renewal are external; restart after replacing certificate files. HTTPS automatically enables Secure cookies. Only the loopback health probe accepts private/self-signed certificates without CA verification; browsers still validate normally.

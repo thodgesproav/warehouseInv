@@ -1,4 +1,5 @@
 import copy
+import json
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -59,6 +60,7 @@ def test_setup_creates_superadmin_saves_urls_and_cannot_be_reclaimed(fresh):
     with db_session() as db:
         user = db.execute('SELECT * FROM users').fetchone()
         assert user['access_level'] == 'superadmin' and user['role'] == 'admin'
+        assert json.loads(db.execute("SELECT value FROM settings WHERE key='admin_request_user_ids'").fetchone()[0]) == [user['id']]
         assert verify_password(fresh.setup_data['password'], user['password_hash'])
         assert db.execute("SELECT value FROM settings WHERE key='inventory_update_url'").fetchone()[0] == '"'+url+'"'
     assert fresh.started == [True]
