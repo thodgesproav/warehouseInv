@@ -31,6 +31,7 @@ class Settings:
     evidence_path: Path = Path(os.getenv("EVIDENCE_PATH", "data/evidence"))
     backup_path: Path = Path(os.getenv("BACKUP_PATH", "data/backups"))
     warehouse_panel_token: str = field(default=secret_setting("WAREHOUSE_PANEL_TOKEN"), repr=False)
+    warehouse_panel_user: str = os.getenv("WAREHOUSE_PANEL_USER", "panel")
     warehouse_panel_snapshot_url: str = os.getenv("WAREHOUSE_PANEL_SNAPSHOT_URL", "")
     warehouse_panel_username: str = os.getenv("WAREHOUSE_PANEL_USERNAME", "")
     warehouse_panel_password: str = field(default=secret_setting("WAREHOUSE_PANEL_PASSWORD"), repr=False)

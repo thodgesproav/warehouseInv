@@ -1,12 +1,17 @@
 services:
   inventory:
-    image: ghcr.io/thodgesproav/warehouseinv:1.2.0
+    image: ghcr.io/thodgesproav/warehouseinv:1.3.0
     container_name: warehouse-inventory
     pull_policy: always
     restart: unless-stopped
     stop_grace_period: 90s
     ports:
       - "8000:8000"
+    environment:
+      WAREHOUSE_PANEL_USER: panel
+      WAREHOUSE_PANEL_TOKEN_FILE: /run/secrets/warehouse_panel_token
+    secrets:
+      - warehouse_panel_token
     volumes:
       - inventory_data:/data
     read_only: true
@@ -19,3 +24,7 @@ services:
 
 volumes:
   inventory_data:
+
+secrets:
+  warehouse_panel_token:
+    file: ./secrets/warehouse_panel_token

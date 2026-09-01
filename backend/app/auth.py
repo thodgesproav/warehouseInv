@@ -75,6 +75,21 @@ def create_token(user: dict) -> str:
 
 
 def current_user(request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:
+    # The fixed warehouse touch panel cannot reliably retain modern browser
+    # cookies. Its 256-bit installation token therefore authenticates the
+    # configured, low-privilege panel account directly. The token has no clock
+    # expiry; disabling the user or rotating/removing the token revokes it.
+    from .panel_evidence import is_warehouse_panel_request
+    if is_warehouse_panel_request(request):
+        if request.method not in ('GET', 'HEAD', 'OPTIONS'): check_browser_request(request)
+        with db_session() as db:
+            row = db.execute(
+                "SELECT id,username,display_name,role,access_level,email,disabled FROM users WHERE username=? COLLATE NOCASE",
+                (settings.warehouse_panel_user,),
+            ).fetchone()
+        if not row or row['disabled']:
+            raise HTTPException(401, "The warehouse panel account is unavailable")
+        return effective_user(dict(row))
     token = request.cookies.get(SESSION_COOKIE)
     if token and not credentials:
         if request.method not in ('GET', 'HEAD', 'OPTIONS'): check_browser_request(request)

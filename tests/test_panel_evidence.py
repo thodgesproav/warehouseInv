@@ -4,6 +4,7 @@ from fastapi import Request
 from PIL import Image
 
 from app import api as inventory_api
+from app.auth import hash_password
 from app.config import settings
 from app.database import db_session, initialise, utcnow
 from app import panel_evidence
@@ -45,6 +46,44 @@ def test_panel_identity_requires_token_and_crestron_user_agent(monkeypatch):
     assert panel_evidence.is_warehouse_panel_request(request({"X-Warehouse-Panel-Token": PANEL_TOKEN, "User-Agent": PANEL_UA}))
     assert not panel_evidence.is_warehouse_panel_request(request({"X-Warehouse-Panel-Token": PANEL_TOKEN, "User-Agent": "Desktop"}))
     assert not panel_evidence.is_warehouse_panel_request(request({"X-Warehouse-Panel-Token": "b" * 64, "User-Agent": PANEL_UA}))
+
+
+def test_panel_token_permanently_authenticates_configured_panel_user(client, monkeypatch):
+    client.app.dependency_overrides.pop(inventory_api.current_user, None)
+    monkeypatch.setitem(settings.__dict__, "warehouse_panel_token", PANEL_TOKEN)
+    monkeypatch.setitem(settings.__dict__, "warehouse_panel_user", "panel-user")
+    with db_session() as db:
+        db.execute(
+            "INSERT INTO users(username,display_name,password_hash,role,access_level,email,disabled,created_at) VALUES(?,?,?,?,?,?,0,?)",
+            ("panel-user", "Warehouse Panel", hash_password("unused-panel-password"), "standard", "standard", "", utcnow()),
+        )
+
+    panel_headers = {"X-Warehouse-Panel-Token": PANEL_TOKEN, "User-Agent": PANEL_UA}
+    response = client.get('/api/auth/me', headers=panel_headers)
+    assert response.status_code == 200
+    assert response.json()["username"] == "panel-user"
+    assert response.json()["warehouse_panel"] is True
+    assert client.get('/api/auth/me', headers={**panel_headers, "User-Agent": "Desktop"}).status_code == 401
+
+    with db_session() as db:
+        db.execute("UPDATE users SET disabled=1 WHERE username='panel-user'")
+    assert client.get('/api/auth/me', headers=panel_headers).status_code == 401
+
+
+def test_panel_token_mutations_still_require_app_request_header(client, monkeypatch):
+    client.app.dependency_overrides.pop(inventory_api.current_user, None)
+    monkeypatch.setitem(settings.__dict__, "warehouse_panel_token", PANEL_TOKEN)
+    monkeypatch.setitem(settings.__dict__, "warehouse_panel_user", "panel-user")
+    with db_session() as db:
+        db.execute(
+            "INSERT INTO users(username,display_name,password_hash,role,access_level,email,disabled,created_at) VALUES(?,?,?,?,?,?,0,?)",
+            ("panel-user", "Warehouse Panel", hash_password("unused-panel-password"), "standard", "standard", "", utcnow()),
+        )
+    headers = {"X-Warehouse-Panel-Token": PANEL_TOKEN, "User-Agent": PANEL_UA}
+    assert client.post('/api/requests', headers=headers, json={
+        'item_requested': 'Cable', 'manufacturer': '', 'manufacturer_model': '',
+        'quantity': 1, 'notes': '', 'notify_available': False,
+    }).status_code == 403
 
 
 def test_capture_saves_original_full_resolution_jpeg(tmp_path, monkeypatch):
