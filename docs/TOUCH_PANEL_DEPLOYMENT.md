@@ -74,4 +74,4 @@ Record each production deployment without recording secrets:
 
 | Date | Git commit | Image tag and digest | CH5 manifest SHA-256 | Result |
 | --- | --- | --- | --- | --- |
-| 2026-09-02 | To be recorded after commit | `1.3.0` · `sha256:320c62836bbbe9bcbc61dae30d150e160b27c2dac5fb8a78c1ae3ce3dd312814` | Inner manifest `4bc007d430d190ea286aa402a7c59cbba5931dc8a0cad01293ef41749222e940` | Panel loaded; server redeploy pending |
+| 2026-09-02 | `dafe01b` | `1.3.0` · `sha256:320c62836bbbe9bcbc61dae30d150e160b27c2dac5fb8a78c1ae3ce3dd312814` | Inner manifest `4bc007d430d190ea286aa402a7c59cbba5931dc8a0cad01293ef41749222e940` | Panel loaded; server redeploy pending |
