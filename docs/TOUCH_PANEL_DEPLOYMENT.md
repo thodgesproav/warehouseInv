@@ -7,7 +7,7 @@ This is the handover procedure for the warehouse TSW-1060 and its inventory serv
 - Inventory server URL: `http://192.168.68.7:8000`
 - Dockge URL: `http://192.168.68.7:5001`
 - Current panel management address: `192.168.123.44` (DHCP/network dependent; discover it again if the panel moves)
-- Docker image: `ghcr.io/thodgesproav/warehouseinv:1.3.0`
+- Docker image: `ghcr.io/thodgesproav/warehouseinv:1.3.1`
 - Container name: `warehouse-inventory`
 - Panel project: `crestron/tsw-1060-launcher/dist/WarehouseInventoryLauncher.ch5z`
 - Panel project target: `TSW-1060`, `1280x800`
@@ -20,6 +20,8 @@ The launcher endpoint is deliberately fixed in `crestron/tsw-1060-launcher/src/l
 The CH5 launcher and server share one random 64-character hexadecimal `WAREHOUSE_PANEL_TOKEN`. The server reads it from a Docker secret and the launcher embeds it in the generated archive. This installation token has no time-based expiry. On every request the server also requires the Crestron touch-panel user agent and looks up the configured panel account again, so disabling that account takes effect immediately.
 
 This is intentionally not a normal user bearer token and must never be used by desktop or mobile clients. The panel account must remain a low-privilege `standard` account. Anyone with the CH5Z can extract the token, so store the archive and secret as credentials. Rotate the token after loss, suspected disclosure, panel replacement, or reassignment.
+
+On a clean installation, completing the first-run wizard automatically creates this locked-down `panel` identity with an undisclosed random password. No separate panel-account onboarding step is required.
 
 Do not put the token in Git, documentation, Dockge compose text, shell history, tickets, or screenshots. Store it in `secrets/warehouse_panel_token` beside the Dockge compose file with restrictive permissions. The compose file references it through:
 

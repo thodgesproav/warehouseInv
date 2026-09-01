@@ -1,5 +1,6 @@
 """One-time, owner-authorised setup. No default accounts or public secret readback."""
 import os
+import re
 import secrets
 from pathlib import Path
 
@@ -102,12 +103,27 @@ def complete(data: SetupIn, request: Request):
     if not data.mapping.get('name') or data.mapping.get('id') != 'Inventory ID' or data.mapping.get('stock') != 'SOH':
         raise HTTPException(422, 'A name heading is required; Inventory ID and SOH must retain their script headings')
     password_hash = hash_password(data.password)
+    panel_username = settings.warehouse_panel_user.strip()
+    panel_password_hash = None
+    if settings.warehouse_panel_token:
+        if not re.fullmatch(r'[A-Za-z0-9_.-]{3,80}', panel_username):
+            raise HTTPException(503, 'The configured warehouse panel username is invalid')
+        if panel_username.casefold() == data.username.casefold():
+            raise HTTPException(422, 'Choose a Superadmin username different from the warehouse panel account')
+        # The random password is deliberately never disclosed or used. The
+        # installed panel token is the only login mechanism for this account.
+        panel_password_hash = hash_password(secrets.token_urlsafe(48))
     with db_session() as db:
         db.execute('BEGIN IMMEDIATE')
         if db.execute('SELECT 1 FROM users LIMIT 1').fetchone():
             raise HTTPException(409, 'Setup has already been completed')
         owner = db.execute("INSERT INTO users(username,display_name,email,password_hash,role,access_level,created_at) VALUES(?,?,?,?,'admin','superadmin',?)",
                            (data.username, data.display_name, email, password_hash, utcnow()))
+        if panel_password_hash:
+            db.execute(
+                "INSERT INTO users(username,display_name,email,password_hash,role,access_level,created_at) VALUES(?,?,'',?,'standard','standard',?)",
+                (panel_username, 'Warehouse Panel', panel_password_hash, utcnow()),
+            )
         for key, value in {
             'inventory_read_url': read_url, 'inventory_update_url': update_url, 'inventory_api_key': data.api_key,
             'inventory_sync_enabled': bool(read_url) and not data.configure_later,

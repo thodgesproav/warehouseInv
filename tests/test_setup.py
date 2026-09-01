@@ -73,6 +73,24 @@ def test_setup_creates_superadmin_saves_urls_and_cannot_be_reclaimed(fresh):
     assert fresh.get('/api/auth/me').json()['role'] == 'superadmin'
 
 
+def test_setup_creates_token_only_panel_identity_when_configured(fresh, monkeypatch):
+    monkeypatch.setitem(settings.__dict__, 'warehouse_panel_token', 'a' * 64)
+    monkeypatch.setitem(settings.__dict__, 'warehouse_panel_user', 'panel')
+    assert complete(fresh).status_code == 201
+    with db_session() as db:
+        panel = dict(db.execute("SELECT * FROM users WHERE username='panel'").fetchone())
+        assert panel['display_name'] == 'Warehouse Panel'
+        assert panel['role'] == 'standard' and panel['access_level'] == 'standard'
+        assert panel['email'] == '' and not panel['disabled']
+    response = fresh.get('/api/auth/me', headers={
+        'X-Warehouse-Panel-Token': 'a' * 64,
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 5.1.1; Crestron Touchpanel Build/LMY47V; wv)',
+    })
+    assert response.status_code == 200
+    assert response.json()['username'] == 'panel'
+    assert response.json()['warehouse_panel'] is True
+
+
 def test_setup_commit_is_atomic_and_race_safe(fresh):
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(lambda _: complete(fresh), range(2)))
