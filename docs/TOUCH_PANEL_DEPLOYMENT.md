@@ -72,9 +72,9 @@ To rotate the permanent token, generate a new cryptographically random 32-byte h
 
 If the panel shows a white page, first confirm the server is running the legacy-browser production build. If it shows a login page, the server and CH5Z tokens differ, `WAREHOUSE_PANEL_USER` does not match an active standard account, or the launcher fragment was not processed. If inventory loads but camera capture fails, verify the server's panel snapshot URL and panel web credentials independently of the installation token.
 
-## Current workbook attention
+## Current workbook state
 
-The 2026-09-02 production check found 111 Excel rows and no queued app writes, but two cable rows share `Inventory ID` `INV-EXCEL-1788302995799-2`: `5mtr RJ45 Cat 6 Patch Cable - Black` and `3mtr RJ45 Cat 6 Patch Cable - Black`. Give either row a new unique, non-blank ID in Excel. Until then, background reconciliation intentionally remains paused so a stock write cannot target the wrong row.
+The duplicate `Inventory ID` found during the initial 1.4.0 deployment was corrected in Excel. The follow-up production check on 2026-09-02 returned 111 rows, zero blank IDs, zero duplicate IDs, no queued/conflicted writes, and a successful background sync. The saved category mapping was aligned to the workbook's exact `TYPE` heading. If the blank/duplicate warning returns, correct the workbook rather than clearing the server queue; the fail-closed check prevents a stock write from targeting the wrong row.
 
 Version 1.4.0 accepts missing optional mappings and exposes changed headings for remapping. Before renaming the mapped ID or stock heading, also replace the Microsoft 365 Office Script with the repository's current `docs/power-automate/InventoryOperations.ts`; the Power Automate flow and its five parameter mappings do not change. A repository or container update cannot replace the tenant-hosted Office Script automatically.
 
